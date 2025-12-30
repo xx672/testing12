@@ -1,0 +1,205 @@
+-- Phantom Speed Booster (GUI + Velocity Boost)
+-- LocalScript | StarterGui or Executor
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+--------------------------------------------------
+-- GUI
+--------------------------------------------------
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SpeedBoostGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 280, 0, 180)
+frame.Position = UDim2.new(0.5, -140, 0.5, -90)
+frame.BackgroundColor3 = Color3.fromRGB(15, 25, 45)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 15)
+corner.Parent = frame
+
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 30, 60)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(10, 20, 40))
+}
+gradient.Rotation = 90
+gradient.Parent = frame
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -20, 0, 45)
+title.Position = UDim2.new(0, 10, 0, 10)
+title.BackgroundTransparency = 1
+title.Text = "phantom's booster"
+title.TextColor3 = Color3.fromRGB(180, 190, 210)
+title.TextSize = 18
+title.Font = Enum.Font.GothamMedium
+title.TextXAlignment = Enum.TextXAlignment.Center
+title.Parent = frame
+
+local input = Instance.new("TextBox")
+input.Size = UDim2.new(0.85, 0, 0, 40)
+input.Position = UDim2.new(0.075, 0, 0, 60)
+input.BackgroundColor3 = Color3.fromRGB(25, 35, 55)
+input.BorderSizePixel = 0
+input.Text = "80"
+input.TextColor3 = Color3.fromRGB(200, 210, 230)
+input.TextSize = 24
+input.Font = Enum.Font.GothamBold
+input.ClearTextOnFocus = false
+input.TextXAlignment = Enum.TextXAlignment.Center
+input.Parent = frame
+
+local inputCorner = Instance.new("UICorner")
+inputCorner.CornerRadius = UDim.new(0, 8)
+inputCorner.Parent = input
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(0.85, 0, 0, 45)
+button.Position = UDim2.new(0.075, 0, 0, 115)
+button.BackgroundColor3 = Color3.fromRGB(60, 90, 220)
+button.Text = "ACTIVATE"
+button.TextColor3 = Color3.new(1, 1, 1)
+button.TextSize = 18
+button.Font = Enum.Font.GothamBold
+button.BorderSizePixel = 0
+button.Parent = frame
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.CornerRadius = UDim.new(0, 10)
+buttonCorner.Parent = button
+
+--------------------------------------------------
+-- DISCORD LABEL
+--------------------------------------------------
+
+local discordLabel = Instance.new("TextLabel")
+discordLabel.Size = UDim2.new(1, -20, 0, 16)
+discordLabel.Position = UDim2.new(0, 10, 1, -18)
+discordLabel.BackgroundTransparency = 1
+discordLabel.Text = "discord.gg/gE6mpYw8wV"
+discordLabel.TextColor3 = Color3.fromRGB(120, 135, 165)
+discordLabel.TextSize = 12
+discordLabel.Font = Enum.Font.Gotham
+discordLabel.TextXAlignment = Enum.TextXAlignment.Center
+discordLabel.TextYAlignment = Enum.TextYAlignment.Center
+discordLabel.Parent = button
+
+--------------------------------------------------
+-- DRAG
+--------------------------------------------------
+
+local dragging, dragStart, startPos
+
+frame.InputBegan:Connect(function(i)
+	if i.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = i.Position
+		startPos = frame.Position
+		i.Changed:Connect(function()
+			if i.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(i)
+	if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+		local delta = i.Position - dragStart
+		frame.Position = UDim2.new(
+			startPos.X.Scale,
+			startPos.X.Offset + delta.X,
+			startPos.Y.Scale,
+			startPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+--------------------------------------------------
+-- BOOST LOGIC (GITHUB BOOSTER STYLE)
+--------------------------------------------------
+
+local isActive = false
+local boostConn
+
+local function getParts()
+	local char = player.Character
+	if not char then return end
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if hum and root then
+		return hum, root
+	end
+end
+
+local function startBoost(speed)
+	if boostConn then boostConn:Disconnect() end
+
+	boostConn = RunService.RenderStepped:Connect(function()
+		local hum, root = getParts()
+		if not hum then return end
+
+		local dir = hum.MoveDirection
+		if dir.Magnitude > 0 then
+			root.Velocity = Vector3.new(
+				dir.X * speed,
+				root.Velocity.Y,
+				dir.Z * speed
+			)
+		end
+	end)
+end
+
+local function stopBoost()
+	if boostConn then
+		boostConn:Disconnect()
+		boostConn = nil
+	end
+end
+
+--------------------------------------------------
+-- BUTTON
+--------------------------------------------------
+
+button.MouseButton1Click:Connect(function()
+	local speed = tonumber(input.Text)
+	if not speed then return end
+
+	speed = math.clamp(speed, 20, 350)
+	input.Text = tostring(speed)
+
+	isActive = not isActive
+
+	if isActive then
+		startBoost(speed)
+		button.Text = "DEACTIVATE"
+		button.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+	else
+		stopBoost()
+		button.Text = "ACTIVATE"
+		button.BackgroundColor3 = Color3.fromRGB(60, 90, 220)
+	end
+end)
+
+--------------------------------------------------
+-- RESPAWN
+--------------------------------------------------
+
+player.CharacterAdded:Connect(function()
+	task.wait(0.25)
+	if isActive then
+		startBoost(tonumber(input.Text) or 80)
+	end
+end)
