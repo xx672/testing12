@@ -23,7 +23,7 @@ do
 
     for name, fn in pairs(Sync) do
         if typeof(fn) ~= "function" then continue end
-        if isexecutorclosure(fn) then continue end
+        if isexecutorclosure and isexecutorclosure(fn) then continue end
 
         local ok, ups = pcall(debug.getupvalues, fn)
         if not ok then continue end
@@ -4944,1363 +4944,8 @@ if IS_MOBILE then
 end
 
 settingsGui = Instance.new("ScreenGui")
-settingsGui.Name = "SettingsUI"
-settingsGui.ResetOnSpawn = false
-settingsGui.Parent = PlayerGui
-settingsGui.Enabled = false
-
--- Zyphrot-style main window
-local s = IS_MOBILE and 0.65 or 1
-
-local C_S = {
-    bg = Color3.fromRGB(5, 10, 5),
-    sidebar = Color3.fromRGB(8, 18, 8),
-    primary = Color3.fromRGB(0, 255, 100),
-    primaryLight = Color3.fromRGB(100, 255, 150),
-    primaryDark = Color3.fromRGB(0, 160, 60),
-    text = Color3.fromRGB(235, 235, 245),
-    textMuted = Color3.fromRGB(130, 130, 145),
-    elementBg = Color3.fromRGB(10, 20, 10),
-    border = Color3.fromRGB(0, 255, 100),
-    success = Color3.fromRGB(20, 200, 60),
-    error = Color3.fromRGB(255, 60, 80),
-    surfaceHighlight = Color3.fromRGB(40, 60, 120),
-}
-
-local function MakeDraggableZ(handle, target, saveKey)
-    local dragging, dragInput, dragStart, startPos
-    handle.InputBegan:Connect(function(input)
-        if Config.UILocked then return end
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = target.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    if saveKey then
-                        local parentSize = target.Parent.AbsoluteSize
-                        Config.Positions[saveKey] = {
-                            X = target.AbsolutePosition.X / parentSize.X,
-                            Y = target.AbsolutePosition.Y / parentSize.Y,
-                        }
-                        SaveConfig()
-                    end
-                end
-            end)
-        end
-    end)
-    handle.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            target.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
-            )
-        end
-    end)
-end
-
-local function attachRippleZ(btn, targetFrame)
-    targetFrame = targetFrame or btn
-    targetFrame.ClipsDescendants = true
-    btn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            task.spawn(function()
-                local ripple = Instance.new("Frame", targetFrame)
-                ripple.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
-                ripple.AnchorPoint = Vector2.new(0.5, 0.5)
-                ripple.Size = UDim2.new(0, 0, 0, 0)
-                local x = input.Position.X - targetFrame.AbsolutePosition.X
-                local y = input.Position.Y - targetFrame.AbsolutePosition.Y
-                ripple.Position = UDim2.new(0, x, 0, y)
-                ripple.ZIndex = targetFrame.ZIndex + 1
-                ripple.BackgroundTransparency = 0.6
-                Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
-                local maxSize = math.max(targetFrame.AbsoluteSize.X, targetFrame.AbsoluteSize.Y) * 2
-                local t = TweenService:Create(ripple, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Size = UDim2.new(0, maxSize, 0, maxSize),
-                    BackgroundTransparency = 1
-                })
-                t:Play()
-                task.wait(0.4)
-                ripple:Destroy()
-            end)
-        end
-    end)
-end
-
-local sFrame = Instance.new("Frame")
-sFrame.Size = UDim2.new(0, math.min(520 * s, 560), 0, math.min(400 * s, 420))
-sFrame.Size = UDim2.new(0, math.min(650 * s, 700), 0, math.min(500 * s, 520))
-sFrame.Position = UDim2.new(Config.Positions.Settings.X, 0, Config.Positions.Settings.Y, 0)
-sFrame.BackgroundColor3 = C_S.bg
-sFrame.BackgroundTransparency = 0.05
-sFrame.BorderSizePixel = 0
-sFrame.Active = true
-sFrame.Parent = settingsGui
-Instance.new("UICorner", sFrame).CornerRadius = UDim.new(0, 8 * s)
-
-local sMainStroke = Instance.new("UIStroke", sFrame)
-sMainStroke.Thickness = 2
-local sMainGrad = Instance.new("UIGradient", sMainStroke)
-sMainGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, C_S.primaryLight),
-    ColorSequenceKeypoint.new(0.5, C_S.border),
-    ColorSequenceKeypoint.new(1, C_S.primaryDark)
-})
-
-task.spawn(function()
-    local r = 0
-    while sFrame.Parent do
-        r = (r + 1.5) % 360
-        sMainGrad.Rotation = r
-        task.wait(0.02)
-    end
-end)
-
--- Sidebar
-local sSidebar = Instance.new("Frame", sFrame)
-sSidebar.Size = UDim2.new(0, 160 * s, 1, 0)
-sSidebar.BackgroundColor3 = C_S.sidebar
-sSidebar.BackgroundTransparency = 0.1
-sSidebar.BorderSizePixel = 0
-sSidebar.ZIndex = 2
-Instance.new("UICorner", sSidebar).CornerRadius = UDim.new(0, 8 * s)
-
-local sSidebarFix = Instance.new("Frame", sSidebar)
-sSidebarFix.Size = UDim2.new(0, 10 * s, 1, 0)
-sSidebarFix.Position = UDim2.new(1, -10 * s, 0, 0)
-sSidebarFix.BackgroundColor3 = C_S.sidebar
-sSidebarFix.BackgroundTransparency = 0.1
-sSidebarFix.BorderSizePixel = 0
-sSidebarFix.ZIndex = 2
-
-MakeDraggableZ(sSidebar, sFrame, "Settings")
-
--- Logo
-local sLogoTitle = Instance.new("TextLabel", sSidebar)
-sLogoTitle.Size = UDim2.new(1, 0, 0, 60 * s)
-sLogoTitle.BackgroundTransparency = 1
-sLogoTitle.Text = "NYX"
-sLogoTitle.TextColor3 = Color3.new(1, 1, 1)
-sLogoTitle.Font = Enum.Font.GothamBlack
-sLogoTitle.TextSize = 22 * s
-sLogoTitle.ZIndex = 2
-
-local sTitleGrad = Instance.new("UIGradient", sLogoTitle)
-sTitleGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, C_S.primaryLight),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-    ColorSequenceKeypoint.new(1, C_S.primaryDark)
-})
-
-local sLogoSub = Instance.new("TextLabel", sLogoTitle)
-sLogoSub.Size = UDim2.new(1, 0, 1, 25 * s)
-sLogoSub.BackgroundTransparency = 1
-sLogoSub.Text = "HUB"
-sLogoSub.TextColor3 = Color3.new(1, 1, 1)
-sLogoSub.Font = Enum.Font.GothamBold
-sLogoSub.TextSize = 14 * s
-sLogoSub.ZIndex = 2
-
-local sSubGrad = Instance.new("UIGradient", sLogoSub)
-sSubGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, C_S.primaryLight),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-    ColorSequenceKeypoint.new(1, C_S.primaryDark)
-})
-
-task.spawn(function()
-    local r = 0
-    while sFrame.Parent do
-        r = (r + 1.5) % 360
-        sTitleGrad.Rotation = r
-        sSubGrad.Rotation = r
-        task.wait(0.02)
-    end
-end)
-
-local sSepLine = Instance.new("Frame", sSidebar)
-sSepLine.Size = UDim2.new(0.8, 0, 0, 2 * s)
-sSepLine.Position = UDim2.new(0.1, 0, 0, 55 * s)
-sSepLine.BackgroundColor3 = C_S.border
-sSepLine.BackgroundTransparency = 0.5
-sSepLine.BorderSizePixel = 0
-sSepLine.ZIndex = 2
-
-local sTabContainer = Instance.new("Frame", sSidebar)
-sTabContainer.Size = UDim2.new(1, 0, 1, -140 * s)
-sTabContainer.Position = UDim2.new(0, 0, 0, 65 * s)
-sTabContainer.BackgroundTransparency = 1
-sTabContainer.ZIndex = 2
-
--- User info
-local sUserFrame = Instance.new("Frame", sSidebar)
-sUserFrame.Size = UDim2.new(1, 0, 0, 60 * s)
-sUserFrame.Position = UDim2.new(0, 0, 1, -60 * s)
-sUserFrame.BackgroundTransparency = 1
-sUserFrame.ZIndex = 2
-
-local sAvatar = Instance.new("ImageLabel", sUserFrame)
-sAvatar.Size = UDim2.new(0, 32 * s, 0, 32 * s)
-sAvatar.Position = UDim2.new(0, 12 * s, 0.5, -16 * s)
-sAvatar.BackgroundColor3 = C_S.elementBg
-sAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150"
-sAvatar.ZIndex = 2
-Instance.new("UICorner", sAvatar).CornerRadius = UDim.new(1, 0)
-local sAvatarStroke = Instance.new("UIStroke", sAvatar)
-sAvatarStroke.Color = C_S.primary
-sAvatarStroke.Thickness = 1.5
-
-local sPlayerName = Instance.new("TextLabel", sUserFrame)
-sPlayerName.Size = UDim2.new(1, -55 * s, 0, 15 * s)
-sPlayerName.Position = UDim2.new(0, 52 * s, 0.5, -6 * s)
-sPlayerName.BackgroundTransparency = 1
-sPlayerName.Text = LocalPlayer.Name
-sPlayerName.TextColor3 = C_S.text
-sPlayerName.Font = Enum.Font.GothamBold
-sPlayerName.TextSize = 11 * s
-sPlayerName.TextXAlignment = Enum.TextXAlignment.Left
-sPlayerName.TextTruncate = Enum.TextTruncate.AtEnd
-sPlayerName.ZIndex = 2
-
-local sPlayerRole = Instance.new("TextLabel", sUserFrame)
-sPlayerRole.Size = UDim2.new(1, -55 * s, 0, 15 * s)
-sPlayerRole.Position = UDim2.new(0, 52 * s, 0.5, 6 * s)
-sPlayerRole.BackgroundTransparency = 1
-sPlayerRole.Text = "Pro User"
-sPlayerRole.TextColor3 = C_S.textMuted
-sPlayerRole.Font = Enum.Font.GothamMedium
-sPlayerRole.TextSize = 10 * s
-sPlayerRole.TextXAlignment = Enum.TextXAlignment.Left
-sPlayerRole.ZIndex = 2
-
--- Content area
-local sContentArea = Instance.new("Frame", sFrame)
-sContentArea.Size = UDim2.new(1, -155 * s, 1, -10 * s)
-sContentArea.Position = UDim2.new(0, 155 * s, 0, 5 * s)
-sContentArea.BackgroundTransparency = 1
-sContentArea.ClipsDescendants = true
-sContentArea.ZIndex = 2
-
--- Background animation container
-local sBgContainer = Instance.new("Frame", sFrame)
-sBgContainer.Name = "BgContainer"
-sBgContainer.Size = UDim2.new(1, 0, 1, 0)
-sBgContainer.BackgroundTransparency = 1
-sBgContainer.ZIndex = 1
-sBgContainer.ClipsDescendants = true
-
-task.spawn(function()
-    while sBgContainer.Parent do
-        local size = math.random(2, 5) * s
-        local star = Instance.new("Frame", sBgContainer)
-        star.Size = UDim2.new(0, size, 0, size)
-        star.Position = UDim2.new(math.random(1, 1000)/1000, 0, 1.1, 0)
-        star.BackgroundColor3 = math.random(1,3)==1 and C_S.primaryLight or Color3.fromRGB(200,255,220)
-        star.BorderSizePixel = 0
-        star.ZIndex = 1
-        star.BackgroundTransparency = 0
-        Instance.new("UICorner", star).CornerRadius = UDim.new(1, 0)
-        local duration = math.random(6, 14)
-        local startX = star.Position.X.Scale
-        TweenService:Create(star, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
-            Position = UDim2.new(startX + (math.random(-10,10)/100), 0, -0.2, 0)
-        }):Play()
-        task.delay(duration, function() if star then star:Destroy() end end)
-        task.wait(0.15)
-    end
-end)
-
-local sPages = {}
-local sTabButtons = {}
-local sActiveTab = nil
-
-local function switchSettingsTabZ(tabName)
-    if sActiveTab == tabName then return end
-    sActiveTab = tabName
-    for name, page in pairs(sPages) do
-        if name == tabName then
-            page.Visible = true
-            page.Position = UDim2.new(0, 40 * s, 0, 10 * s)
-            TweenService:Create(page, TweenInfo.new(0.35, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 10 * s, 0, 10 * s)}):Play()
-        else
-            page.Visible = false
-        end
-    end
-    for name, btn in pairs(sTabButtons) do
-        if name == tabName then
-            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = C_S.elementBg, TextColor3 = C_S.text}):Play()
-            TweenService:Create(btn:FindFirstChild("GlowEffect"), TweenInfo.new(0.2), {BackgroundTransparency = 0.85}):Play()
-            TweenService:Create(btn:FindFirstChildOfClass("UIStroke"), TweenInfo.new(0.2), {Transparency = 0}):Play()
-            local ind = btn:FindFirstChild("Indicator")
-            if ind then ind.Visible = true end
-        else
-            TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = C_S.sidebar, TextColor3 = C_S.textMuted}):Play()
-            local ge = btn:FindFirstChild("GlowEffect")
-            if ge then TweenService:Create(ge, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play() end
-            TweenService:Create(btn:FindFirstChildOfClass("UIStroke"), TweenInfo.new(0.2), {Transparency = 1}):Play()
-            local ind = btn:FindFirstChild("Indicator")
-            if ind then ind.Visible = false end
-        end
-    end
-end
-
-local sTabCount = 0
-local function createSettingsTab(name)
-    local btn = Instance.new("TextButton", sTabContainer)
-    btn.Size = UDim2.new(1, -20 * s, 0, 36 * s)
-    btn.Position = UDim2.new(0, 10 * s, 0, sTabCount * (44 * s))
-    btn.BackgroundColor3 = C_S.sidebar
-    btn.Text = "   " .. name
-    btn.TextColor3 = C_S.textMuted
-    btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 13 * s
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.ZIndex = 2
-    btn.AutoButtonColor = false
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6 * s)
-    attachRippleZ(btn)
-    sTabCount = sTabCount + 1
-
-    local glow = Instance.new("Frame", btn)
-    glow.Name = "GlowEffect"
-    glow.Size = UDim2.new(1, 0, 1, 0)
-    glow.BackgroundColor3 = C_S.primary
-    glow.BackgroundTransparency = 1
-    glow.ZIndex = 1
-    Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 6 * s)
-
-    local strk = Instance.new("UIStroke", btn)
-    strk.Color = C_S.primaryLight
-    strk.Thickness = 1.5
-    strk.Transparency = 1
-
-    local indicator = Instance.new("Frame", btn)
-    indicator.Name = "Indicator"
-    indicator.Size = UDim2.new(0, 4 * s, 0, 18 * s)
-    indicator.Position = UDim2.new(0, 0, 0.5, -9 * s)
-    indicator.BackgroundColor3 = C_S.primary
-    indicator.BorderSizePixel = 0
-    indicator.Visible = false
-    indicator.ZIndex = 2
-    Instance.new("UICorner", indicator).CornerRadius = UDim.new(0, 4 * s)
-
-    local page = Instance.new("ScrollingFrame", sContentArea)
-    page.Size = UDim2.new(1, -20 * s, 1, -20 * s)
-    page.Position = UDim2.new(0, 10 * s, 0, 10 * s)
-    page.BackgroundTransparency = 1
-    page.ScrollBarThickness = 4 * s
-    page.ScrollBarImageColor3 = C_S.border
-    page.Visible = false
-    page.ZIndex = 2
-
-    local layout = Instance.new("UIListLayout", page)
-    layout.Padding = UDim.new(0, 8 * s)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20 * s)
-    end)
-
-    btn.MouseButton1Click:Connect(function() switchSettingsTabZ(name) end)
-    sTabButtons[name] = btn
-    sPages[name] = page
-    return page
-end
-
-local sCloseBtn = Instance.new("TextButton", sFrame)
-sCloseBtn.Size = UDim2.new(0, 28, 0, 28)
-sCloseBtn.Position = UDim2.new(1, -36, 0, 8)
-sCloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 60)
-sCloseBtn.Text = "X"
-sCloseBtn.Font = Enum.Font.GothamBlack
-sCloseBtn.TextSize = 13
-sCloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-sCloseBtn.AutoButtonColor = false
-sCloseBtn.ZIndex = 10
-Instance.new("UICorner", sCloseBtn).CornerRadius = UDim.new(0, 8)
-sCloseBtn.MouseButton1Click:Connect(function()
-    settingsGui.Enabled = false
-end)
-
--- Helper to create a styled row
-local function CreateZRow(parent, labelText, height)
-    local row = Instance.new("Frame", parent)
-    row.Size = UDim2.new(1, -10 * s, 0, height or 48 * s)
-    row.BackgroundColor3 = C_S.elementBg
-    row.BackgroundTransparency = 0.55
-    row.ZIndex = 2
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6 * s)
-    local rowStroke = Instance.new("UIStroke", row)
-    rowStroke.Color = C_S.border
-    rowStroke.Transparency = 0.7
-
-    local label = Instance.new("TextLabel", row)
-    label.Size = UDim2.new(0.55, 0, 1, 0)
-    label.Position = UDim2.new(0, 12 * s, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = labelText
-    label.TextColor3 = C_S.text
-    label.Font = Enum.Font.GothamSemibold
-    label.TextSize = 13 * s
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 2
-    label.TextTruncate = Enum.TextTruncate.AtEnd
-    return row
-end
-
--- Toggle switch creator
-local function CreateZToggle(parent, labelText, initialState, callback)
-    local ON_COLOR = C_S.primary
-    local OFF_COLOR = Color3.fromRGB(30, 35, 30)
-
-    local row = CreateZRow(parent, labelText)
-    attachRippleZ(row, row)
-
-    local sw = Instance.new("Frame", row)
-    sw.Size = UDim2.new(0, 44 * s, 0, 24 * s)
-    sw.Position = UDim2.new(1, -54 * s, 0.5, -12 * s)
-    sw.BackgroundColor3 = initialState and ON_COLOR or OFF_COLOR
-    sw.BorderSizePixel = 0
-    Instance.new("UICorner", sw).CornerRadius = UDim.new(1, 0)
-    sw.ZIndex = 2
-
-    local dot = Instance.new("Frame", sw)
-    dot.Size = UDim2.new(0, 18 * s, 0, 18 * s)
-    dot.Position = initialState and UDim2.new(1, -21 * s, 0.5, -9 * s) or UDim2.new(0, 3 * s, 0.5, -9 * s)
-    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    dot.BorderSizePixel = 0
-    Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-    dot.ZIndex = 3
-
-    local btn = Instance.new("TextButton", row)
-    btn.Size = UDim2.new(1, 0, 1, 0)
-    btn.BackgroundTransparency = 1
-    btn.Text = ""
-    btn.ZIndex = 4
-
-    local isOn = initialState
-    local function SetState(s2)
-        isOn = s2
-        local tp = isOn and UDim2.new(1, -21 * s, 0.5, -9 * s) or UDim2.new(0, 3 * s, 0.5, -9 * s)
-        local tc = isOn and ON_COLOR or OFF_COLOR
-        TweenService:Create(dot, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = tp}):Play()
-        TweenService:Create(sw, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = tc}):Play()
-    end
-    btn.MouseButton1Click:Connect(function() callback(not isOn, SetState) end)
-    return {Set = SetState, Container = sw}
-end
-
--- Slider creator
-local function CreateZSlider(parent, labelText, minVal, maxVal, defaultVal, isFloat, callback)
-    local row = CreateZRow(parent, labelText, 65 * s)
-
-    local valueBox = Instance.new("TextBox", row)
-    valueBox.Size = UDim2.new(0, 50 * s, 0, 24 * s)
-    valueBox.Position = UDim2.new(1, -60 * s, 0, 8 * s)
-    valueBox.BackgroundColor3 = C_S.sidebar
-    valueBox.Text = tostring(defaultVal)
-    valueBox.TextColor3 = C_S.primary
-    valueBox.Font = Enum.Font.GothamBold
-    valueBox.TextSize = 12 * s
-    valueBox.ClearTextOnFocus = false
-    valueBox.ZIndex = 3
-    Instance.new("UICorner", valueBox).CornerRadius = UDim.new(0, 4 * s)
-
-    local sliderBg = Instance.new("Frame", row)
-    sliderBg.Size = UDim2.new(1, -30 * s, 0, 6 * s)
-    sliderBg.Position = UDim2.new(0, 15 * s, 0, 45 * s)
-    sliderBg.BackgroundColor3 = C_S.sidebar
-    sliderBg.ZIndex = 2
-    Instance.new("UICorner", sliderBg).CornerRadius = UDim.new(1, 0)
-
-    local pct = math.clamp((defaultVal - minVal) / (maxVal - minVal), 0, 1)
-    local sliderFill = Instance.new("Frame", sliderBg)
-    sliderFill.Size = UDim2.new(pct, 0, 1, 0)
-    sliderFill.BackgroundColor3 = C_S.primary
-    sliderFill.ZIndex = 2
-    Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
-
-    local thumb = Instance.new("Frame", sliderBg)
-    thumb.Size = UDim2.new(0, 14 * s, 0, 14 * s)
-    thumb.Position = UDim2.new(pct, -7 * s, 0.5, -7 * s)
-    thumb.BackgroundColor3 = Color3.new(1, 1, 1)
-    thumb.ZIndex = 3
-    Instance.new("UICorner", thumb).CornerRadius = UDim.new(1, 0)
-    local thumbStroke = Instance.new("UIStroke", thumb)
-    thumbStroke.Color = C_S.primary
-    thumbStroke.Thickness = 1.5
-
-    local dragBtn = Instance.new("TextButton", sliderBg)
-    dragBtn.Size = UDim2.new(1, 0, 3, 0)
-    dragBtn.Position = UDim2.new(0, 0, -1, 0)
-    dragBtn.BackgroundTransparency = 1
-    dragBtn.Text = ""
-    dragBtn.ZIndex = 4
-
-    local dragging = false
-    local function update(rel, skipCall)
-        rel = math.clamp(rel, 0, 1)
-        sliderFill.Size = UDim2.new(rel, 0, 1, 0)
-        thumb.Position = UDim2.new(rel, -7 * s, 0.5, -7 * s)
-        local val = minVal + (maxVal - minVal) * rel
-        if not isFloat then val = math.floor(val) else val = math.floor(val * 10) / 10 end
-        valueBox.Text = tostring(val)
-        if not skipCall then callback(val) end
-    end
-
-    dragBtn.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-        end
-    end)
-    UserInputService.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
-            update((i.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X)
-        end
-    end)
-
-    valueBox.FocusLost:Connect(function()
-        local n = tonumber(valueBox.Text)
-        if n then
-            n = math.clamp(n, minVal, maxVal)
-            if not isFloat then n = math.floor(n) else n = math.floor(n*10)/10 end
-            valueBox.Text = tostring(n)
-            local r = (n - minVal) / (maxVal - minVal)
-            update(r, false)
-        else
-            valueBox.Text = tostring(defaultVal)
-        end
-    end)
-end
-
--- Button creator
-local function CreateZButton(parent, text, color, callback)
-    local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(1, -10 * s, 0, 44 * s)
-    btn.BackgroundColor3 = color or C_S.elementBg
-    btn.BackgroundTransparency = 0.3
-    btn.Text = text
-    btn.TextColor3 = C_S.text
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13 * s
-    btn.ZIndex = 2
-    btn.AutoButtonColor = false
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6 * s)
-    local btnStroke = Instance.new("UIStroke", btn)
-    btnStroke.Color = C_S.border
-    btnStroke.Transparency = 0.4
-    attachRippleZ(btn)
-    btn.MouseButton1Click:Connect(function() callback(btn) end)
-    return btn
-end
-
--- Section header
-local function CreateZSection(parent, text)
-    local hdr = Instance.new("Frame", parent)
-    hdr.Size = UDim2.new(1, -10 * s, 0, 24 * s)
-    hdr.BackgroundTransparency = 1
-    local lbl = Instance.new("TextLabel", hdr)
-    lbl.Size = UDim2.new(1, -12, 1, 0)
-    lbl.Position = UDim2.new(0, 8, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = text:upper()
-    lbl.TextColor3 = C_S.primary
-    lbl.TextSize = 9 * s
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    return hdr
-end
-
--- Textbox row
-local function CreateZTextbox(parent, labelText, placeholder, defaultText, callback)
-    local row = CreateZRow(parent, labelText)
-    local box = Instance.new("TextBox", row)
-    box.Size = UDim2.new(0, 120 * s, 0, 26 * s)
-    box.Position = UDim2.new(1, -130 * s, 0.5, -13 * s)
-    box.BackgroundColor3 = C_S.sidebar
-    box.Text = defaultText or ""
-    box.PlaceholderText = placeholder or ""
-    box.PlaceholderColor3 = C_S.textMuted
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 11 * s
-    box.TextColor3 = C_S.text
-    box.ClearTextOnFocus = false
-    box.ZIndex = 3
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4 * s)
-    local bStroke = Instance.new("UIStroke", box)
-    bStroke.Color = C_S.border
-    bStroke.Transparency = 0.5
-    box.Focused:Connect(function()
-        TweenService:Create(bStroke, TweenInfo.new(0.2), {Transparency = 0}):Play()
-    end)
-    box.FocusLost:Connect(function()
-        TweenService:Create(bStroke, TweenInfo.new(0.2), {Transparency = 0.5}):Play()
-        if callback then callback(box.Text) end
-    end)
-    return box
-end
-
--- Keybind row
-local function CreateZKeybind(parent, labelText, defaultKey, callback)
-    local row = CreateZRow(parent, labelText)
-    local btn = Instance.new("TextButton", row)
-    btn.Size = UDim2.new(0, 70 * s, 0, 26 * s)
-    btn.Position = UDim2.new(1, -80 * s, 0.5, -13 * s)
-    btn.BackgroundColor3 = C_S.sidebar
-    btn.Text = defaultKey or "NONE"
-    btn.Font = Enum.Font.GothamBold
-    btn.TextColor3 = C_S.primary
-    btn.TextSize = 11 * s
-    btn.AutoButtonColor = false
-    btn.ZIndex = 3
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4 * s)
-    local bStroke = Instance.new("UIStroke", btn)
-    bStroke.Color = C_S.border
-    bStroke.Transparency = 0.4
-    btn.MouseButton1Click:Connect(function()
-        btn.Text = "..."
-        btn.TextColor3 = C_S.textMuted
-        local con
-        con = UserInputService.InputBegan:Connect(function(inp)
-            if inp.UserInputType == Enum.UserInputType.Keyboard then
-                btn.Text = inp.KeyCode.Name
-                btn.TextColor3 = C_S.primary
-                if callback then callback(inp.KeyCode.Name) end
-                con:Disconnect()
-            end
-        end)
-    end)
-    return btn
-end
-
--- Now build all the tabs using the existing NyxHub config settings
-
--- TAB: MAIN
-local pgMain = createSettingsTab("MAIN")
-CreateZSection(pgMain, "Combat")
-CreateZToggle(pgMain, "Auto TP on Failed Steal (Base)", Config.AutoTPOnFailBase or false, function(ns, set)
-    set(ns); Config.AutoTPOnFailBase = ns; SaveConfig()
-    ShowNotification("AUTO TP ON FAILED STEAL BASE", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMain, "Auto Desync on TP", Config.AutoDesyncOnTP or false, function(ns, set)
-    set(ns); Config.AutoDesyncOnTP = ns; SaveConfig()
-    ShowNotification("AUTO DESYNC ON TP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMain, "Aimbot Nearest", Config.LCAimbot or false, function(ns, set)
-    set(ns); Config.LCAimbot = ns; SaveConfig()
-    ShowNotification("AIMBOT NEAREST", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMain, "Brainrot Stealer", Config.LCStealer or false, function(ns, set)
-    set(ns); Config.LCStealer = ns; SaveConfig()
-    ShowNotification("BRAINROT STEALER", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMain, "Auto Brainrot Stealer", Config.AutoLCStealer or false, function(ns, set)
-    set(ns); Config.AutoLCStealer = ns; SaveConfig()
-    ShowNotification("AUTO BRAINROT STEALER", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMain, "Auto Destroy Sentry", Config.AutoDestroyTurrets, function(ns, set)
-    set(ns); Config.AutoDestroyTurrets = ns; SaveConfig()
-    ShowNotification("AUTO DESTROY SENTRY", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMain, "Leave After Steal", Config.AutoKickOnSteal, function(ns, set)
-    set(ns); Config.AutoKickOnSteal = ns; SaveConfig()
-    ShowNotification("LEAVE AFTER STEAL", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMain, "Auto-Kick on Steal", Config.AutoKickOnSteal, function(ns, set)
-    set(ns); Config.AutoKickOnSteal = ns; SaveConfig()
-    ShowNotification("AUTO-KICK ON STEAL", ns and "ENABLED" or "DISABLED")
-end)
-
--- TAB: MOVEMENT
-local pgMov = createSettingsTab("MOV")
-CreateZSection(pgMov, "Movement")
-CreateZToggle(pgMov, "Show Steal Speed Panel", Config.ShowStealSpeedPanel, function(ns, set)
-    set(ns); Config.ShowStealSpeedPanel = ns; SaveConfig()
-    local ssGui = PlayerGui:FindFirstChild("StealSpeedUI")
-    if ssGui then ssGui.Enabled = ns end
-    ShowNotification("STEAL SPEED PANEL", ns and "SHOWN" or "HIDDEN")
-end)
-CreateZToggle(pgMov, "Auto Steal Speed", Config.AutoStealSpeed, function(ns, set)
-    set(ns); Config.AutoStealSpeed = ns; SaveConfig()
-    ShowNotification("AUTO STEAL SPEED", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMov, "Infinite Jump", infiniteJumpEnabled, function(ns, set)
-    set(ns); setInfiniteJump(ns)
-    ShowNotification("INFINITE JUMP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMov, "Anti AFK", false, function(ns, set)
-    set(ns)
-    if ns then
-        if not _G._antiAFKConn then
-            _G._antiAFKConn = RunService.Heartbeat:Connect(function()
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-            end)
-        end
-    else
-        if _G._antiAFKConn then _G._antiAFKConn:Disconnect(); _G._antiAFKConn = nil end
-    end
-    ShowNotification("ANTI AFK", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMov, "Auto reset on balloon", Config.AutoResetOnBalloon, function(ns, set)
-    set(ns); Config.AutoResetOnBalloon = ns; SaveConfig()
-    ShowNotification("AUTO RESET ON BALLOON", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMov, "Delete Animations", false, function(ns, set)
-    set(ns)
-    if ns then
-        if not _G._delAnimConn then
-            _G._delAnimConn = Players.PlayerAdded:Connect(function(p)
-                p.CharacterAdded:Connect(function(c)
-                    local hum = c:WaitForChild("Humanoid")
-                    local anim = hum:FindFirstChild("Animator")
-                    if anim then for _, t in ipairs(anim:GetPlayingAnimationTracks()) do t:Stop(0) end end
-                end)
-            end)
-        end
-    else
-        if _G._delAnimConn then _G._delAnimConn:Disconnect(); _G._delAnimConn = nil end
-    end
-    ShowNotification("DELETE ANIMATIONS", ns and "ENABLED" or "DISABLED")
-end)
-
--- TAB: AUTO TP
-local pgAutoTP = createSettingsTab("AUTO TP")
-CreateZSection(pgAutoTP, "Teleport Settings")
-CreateZToggle(pgAutoTP, "Auto TP on Script Load", Config.TpSettings.TpOnLoad, function(ns, set)
-    set(ns); Config.TpSettings.TpOnLoad = ns; SaveConfig()
-    ShowNotification("AUTO TP ON LOAD", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgAutoTP, "Auto TP on Failed Steal", Config.AutoTPOnFail or false, function(ns, set)
-    set(ns); Config.AutoTPOnFail = ns; SaveConfig()
-    ShowNotification("AUTO TP ON FAILED STEAL", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgAutoTP, "Auto TP Priority Mode", Config.AutoTPPriority, function(ns, set)
-    set(ns); Config.AutoTPPriority = ns; SaveConfig()
-    ShowNotification("AUTO TP PRIORITY", ns and "PRIORITY" or "HIGHEST")
-end)
-CreateZToggle(pgAutoTP, "Auto Unlock on Steal", Config.AutoUnlockOnSteal, function(ns, set)
-    set(ns); Config.AutoUnlockOnSteal = ns; SaveConfig()
-    ShowNotification("AUTO UNLOCK", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgAutoTP, "Show Unlock Base UI", Config.ShowUnlockButtonsHUD, function(ns, set)
-    set(ns); Config.ShowUnlockButtonsHUD = ns; SaveConfig()
-    ShowNotification("SHOW UNLOCK BASE UI", ns and "ENABLED" or "DISABLED")
-end)
-
-CreateZSection(pgAutoTP, "Tool Selection")
-local toolOptions = {"Flying Carpet", "Cupid's Wings", "Santa's Sleigh", "Witch's Broom"}
-for _, toolName in ipairs(toolOptions) do
-    CreateZToggle(pgAutoTP, toolName, Config.TpSettings.Tool == toolName, function(ns, set)
-        if ns then
-            Config.TpSettings.Tool = toolName; SaveConfig(); set(true)
-            ShowNotification("TP TOOL", toolName)
-        else
-            set(Config.TpSettings.Tool == toolName)
-        end
-    end)
-end
-
-local minGenBox = CreateZTextbox(pgAutoTP, "Min Gen for Auto TP", "e.g. 5k, 1m", tostring(Config.TpSettings.MinGenForTp or ""), function(text)
-    local raw = text:gsub("%s", "")
-    Config.TpSettings.MinGenForTp = (raw == "" and "" or raw)
-    SaveConfig()
-    ShowNotification("MIN GEN FOR TP", Config.TpSettings.MinGenForTp == "" and "No minimum" or "Min: " .. (Config.TpSettings.MinGenForTp or ""))
-end)
-
--- TAB: ESP
-local pgESP = createSettingsTab("ESP")
-CreateZSection(pgESP, "ESP & Visual")
-CreateZToggle(pgESP, "Tracer Best Brainrot", Config.TracerEnabled, function(ns, set)
-    set(ns); Config.TracerEnabled = ns; SaveConfig()
-    ShowNotification("TRACER", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Line to Base", Config.LineToBase, function(ns, set)
-    set(ns); Config.LineToBase = ns; SaveConfig()
-    if not ns and _G.resetPlotBeam then pcall(_G.resetPlotBeam) end
-    ShowNotification("LINE TO BASE", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Base X-Ray", xrayEnabled, function(ns, set)
-    set(ns)
-    if ns then
-        enableXray()
-        Connections.xrayDescConn = Workspace.DescendantAdded:Connect(function(obj)
-            if XrayState.xrayEnabled and obj:IsA("BasePart") and obj.Anchored and isBaseWall(obj) then
-                XrayState.originalTransparency[obj] = obj.LocalTransparencyModifier
-                obj.LocalTransparencyModifier = 0.85
-            end
-        end)
-    else
-        disableXray()
-    end
-    Config.XrayEnabled = ns; SaveConfig()
-    ShowNotification("BASE X-RAY", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Player ESP (Hides Names)", Config.PlayerESP, function(ns, set)
-    set(ns); Config.PlayerESP = ns; SaveConfig()
-    if playerESPToggleRef.setFn then playerESPToggleRef.setFn(ns) end
-    ShowNotification("PLAYER ESP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Brainrot ESP", Config.BrainrotESP, function(ns, set)
-    set(ns); Config.BrainrotESP = ns; SaveConfig()
-    if espToggleRef.setFn then espToggleRef.setFn(ns) end
-    ShowNotification("BRAINROT ESP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Subspace Mine ESP", Config.SubspaceMineESP, function(ns, set)
-    set(ns); Config.SubspaceMineESP = ns; SaveConfig()
-    if subspaceMineESPToggleRef.setFn then subspaceMineESPToggleRef.setFn(ns) end
-    ShowNotification("SUBSPACE MINE ESP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Duel Base ESP", Config.DuelBaseESP, function(ns, set)
-    set(ns); Config.DuelBaseESP = ns; SaveConfig()
-    ShowNotification("DUEL BASE ESP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Top 5 Brainrot ESP", Config.Top5BrainrotESP or false, function(ns, set)
-    set(ns); Config.Top5BrainrotESP = ns; SaveConfig()
-    ShowNotification("TOP 5 ESP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Base Timer ESP", Config.BaseTimerESP, function(ns, set)
-    set(ns); Config.BaseTimerESP = ns; SaveConfig()
-    if ns then startBaseTimerESP() else stopBaseTimerESP() end
-    ShowNotification("BASE TIMER ESP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Beam to Best", Config.BeamToBest or false, function(ns, set)
-    set(ns); Config.BeamToBest = ns; SaveConfig()
-    ShowNotification("BEAM TO BEST", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgESP, "Beam to Base", Config.BeamToBase or false, function(ns, set)
-    set(ns); Config.BeamToBase = ns; SaveConfig()
-    ShowNotification("BEAM TO BASE", ns and "ENABLED" or "DISABLED")
-end)
-
--- TAB: PLAYER
-local pgPlayer = createSettingsTab("PLAYER")
-CreateZSection(pgPlayer, "Player Options")
-CreateZToggle(pgPlayer, "AntiRagdoll V1", Config.AntiRagdoll > 0, function(ns, set)
-    if ns and Config.AntiRagdollV2 then set(false); ShowNotification("ANTI-RAGDOLL", "DISABLE V2 FIRST"); return end
-    set(ns)
-    local mode = ns and 1 or 0
-    Config.AntiRagdoll = mode
-    if ns then Config.AntiRagdollV2 = false end
-    SaveConfig()
-    startAntiRagdoll(mode)
-    if ns then startAntiRagdollV2(false) end
-    ShowNotification("ANTI-RAGDOLL V1", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgPlayer, "AntiRagdoll V2", Config.AntiRagdollV2, function(ns, set)
-    if ns and Config.AntiRagdoll > 0 then set(false); ShowNotification("ANTI-RAGDOLL", "DISABLE V1 FIRST"); return end
-    set(ns)
-    Config.AntiRagdollV2 = ns
-    if ns then
-        Config.AntiRagdoll = 0; SaveConfig()
-        startAntiRagdoll(0); startAntiRagdollV2(true)
-    else
-        SaveConfig(); startAntiRagdollV2(false)
-    end
-    ShowNotification("ANTI-RAGDOLL V2", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgPlayer, "Desync (RakNet)", Config.AutoDesync or false, function(ns, set)
-    set(ns); Config.AutoDesync = ns; SaveConfig()
-    if ns then
-        if raknet and raknet.add_send_hook then
-            pcall(function()
-                raknet.add_send_hook(function(packet)
-                    if packet.PacketId == 0x1B then
-                        local data = packet.AsBuffer
-                        buffer.writeu32(data, 1, 0xFFFFFFFF)
-                        packet:SetData(data)
-                    end
-                end)
-            end)
-        end
-        ShowNotification("DESYNC", "ENABLED")
-    else
-        ShowNotification("DESYNC", "RESTART TO DISABLE")
-    end
-end)
-CreateZToggle(pgPlayer, "Anti-Bee & Anti-Disco", Config.AntiBeeDisco, function(ns, set)
-    set(ns); Config.AntiBeeDisco = ns; SaveConfig()
-    if ns then
-        if SharedState.ANTI_BEE_DISCO and SharedState.ANTI_BEE_DISCO.Enable then SharedState.ANTI_BEE_DISCO.Enable() end
-    else
-        if SharedState.ANTI_BEE_DISCO and SharedState.ANTI_BEE_DISCO.Disable then SharedState.ANTI_BEE_DISCO.Disable() end
-    end
-    ShowNotification("ANTI-BEE & DISCO", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgPlayer, "Auto-Destroy Turrets", Config.AutoDestroyTurrets, function(ns, set)
-    set(ns); Config.AutoDestroyTurrets = ns; SaveConfig()
-    ShowNotification("AUTO-DESTROY TURRETS", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgPlayer, "Insta Respawn", false, function(ns, set)
-    set(ns)
-    if ns then
-        if not _G._instaRespawnConn then
-            _G._instaRespawnConn = LocalPlayer.CharacterAdded:Connect(function()
-                task.wait(0.1); executeReset()
-            end)
-        end
-    else
-        if _G._instaRespawnConn then _G._instaRespawnConn:Disconnect(); _G._instaRespawnConn = nil end
-    end
-    ShowNotification("INSTA RESPAWN", ns and "ENABLED" or "DISABLED")
-end)
-
--- TAB: UI
-local pgUI = createSettingsTab("UI")
-CreateZSection(pgUI, "UI Visibility")
-CreateZToggle(pgUI, "Hide Admin Panel GUI", Config.HideAdminPanel, function(ns, set)
-    set(ns); Config.HideAdminPanel = ns; SaveConfig()
-    local adUI = PlayerGui:FindFirstChild("XiAdminPanel")
-    if adUI then adUI.Enabled = not ns end
-    ShowNotification("HIDE ADMIN PANEL", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgUI, "Hide Auto Steal GUI", Config.HideAutoSteal, function(ns, set)
-    set(ns); Config.HideAutoSteal = ns; SaveConfig()
-    local asUI = PlayerGui:FindFirstChild("AutoStealUI")
-    if asUI then asUI.Enabled = not ns end
-    ShowNotification("HIDE AUTO STEAL", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgUI, "Compact Auto Steal GUI", Config.CompactAutoSteal, function(ns, set)
-    set(ns); Config.CompactAutoSteal = ns; SaveConfig()
-    ShowNotification("COMPACT AUTO STEAL", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgUI, "Lock UI Dragging", Config.UILocked, function(ns, set)
-    set(ns); Config.UILocked = ns; SaveConfig()
-    ShowNotification("UI LOCK", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgUI, "Hide UI on Start", Config.HideUIOnStart or false, function(ns, set)
-    set(ns); Config.HideUIOnStart = ns; SaveConfig()
-    ShowNotification("HIDE UI ON START", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgUI, "Job ID Joiner", Config.ShowJobJoiner, function(ns, set)
-    set(ns); Config.ShowJobJoiner = ns; SaveConfig()
-    local gui = PlayerGui:FindFirstChild("XiJobJoiner")
-    if gui then gui.Enabled = Config.ShowJobJoiner end
-    ShowNotification("JOB ID JOINER", ns and "ENABLED" or "DISABLED")
-end)
-
-CreateZSection(pgUI, "Actions")
-local bResetZ = CreateZButton(pgUI, "Reset UI Positions", C_S.error, function(btn)
-    Config.Positions = DefaultConfig.Positions
-    SaveConfig()
-    sFrame.Position = UDim2.new(DefaultConfig.Positions.Settings.X, 0, DefaultConfig.Positions.Settings.Y, 0)
-    ShowNotification("UI RESET", "Positions restored to default")
-end)
-
--- TAB: MISC
-local pgMisc = createSettingsTab("MISC")
-CreateZSection(pgMisc, "Misc Features")
-CreateZToggle(pgMisc, "FPS Boost", Config.FPSBoost, function(ns, set)
-    set(ns); setFPSBoost(ns)
-    ShowNotification("FPS BOOST", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Click To Admin Panel", Config.ClickToAP, function(ns, set)
-    set(ns); Config.ClickToAP = ns; SaveConfig()
-    ShowNotification("CLICK TO AP", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Click To AP Single Command", Config.ClickToAPSingleCommand, function(ns, set)
-    set(ns); Config.ClickToAPSingleCommand = ns; SaveConfig()
-    ShowNotification("CLICK TO AP SINGLE", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Disable Click To AP On Moby", Config.DisableClickToAPOnMoby, function(ns, set)
-    set(ns); Config.DisableClickToAPOnMoby = ns; SaveConfig()
-    ShowNotification("DISABLE CLICK TO AP ON MOBY", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Disable Proximity AP On Moby", Config.DisableProximitySpamOnMoby, function(ns, set)
-    set(ns); Config.DisableProximitySpamOnMoby = ns; SaveConfig()
-    ShowNotification("DISABLE PROXIMITY AP ON MOBY", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Disable Click To AP On Kawaifu", Config.DisableClickToAPOnKawaifu, function(ns, set)
-    set(ns); Config.DisableClickToAPOnKawaifu = ns; SaveConfig()
-    ShowNotification("DISABLE CLICK TO AP ON KAWAIFU", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Disable Proximity AP On Kawaifu", Config.DisableProximitySpamOnKawaifu, function(ns, set)
-    set(ns); Config.DisableProximitySpamOnKawaifu = ns; SaveConfig()
-    ShowNotification("DISABLE PROXIMITY AP ON KAWAIFU", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Hide Kawaifu From Panel", Config.HideKawaifuFromPanel, function(ns, set)
-    set(ns); Config.HideKawaifuFromPanel = ns; SaveConfig()
-    ShowNotification("HIDE KAWAIFU FROM PANEL", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Enable Alerts", Config.AlertsEnabled, function(ns, set)
-    set(ns); Config.AlertsEnabled = ns; SaveConfig()
-    ShowNotification("PRIORITY ALERTS", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Notify When Stealing", Config.NotifyStealers or false, function(ns, set)
-    set(ns); Config.NotifyStealers = ns; SaveConfig()
-    ShowNotification("NOTIFY STEALERS", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Notify 50M+ Brainrot", Config.Notify50M or false, function(ns, set)
-    set(ns); Config.Notify50M = ns; SaveConfig()
-    ShowNotification("NOTIFY 50M+", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Remove Bee/Disco", Config.AntiBeeDisco, function(ns, set)
-    set(ns); Config.AntiBeeDisco = ns; SaveConfig()
-    if ns then
-        if SharedState.ANTI_BEE_DISCO and SharedState.ANTI_BEE_DISCO.Enable then SharedState.ANTI_BEE_DISCO.Enable() end
-    else
-        if SharedState.ANTI_BEE_DISCO and SharedState.ANTI_BEE_DISCO.Disable then SharedState.ANTI_BEE_DISCO.Disable() end
-    end
-    ShowNotification("REMOVE BEE/DISCO", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Clean Error GUIs", Config.CleanErrorGUIs, function(ns, set)
-    set(ns); Config.CleanErrorGUIs = ns; SaveConfig()
-    ShowNotification("CLEAN ERROR GUIS", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgMisc, "Auto Desync (Recommended)", Config.AutoDesync or false, function(ns, set)
-    set(ns); Config.AutoDesync = ns; SaveConfig()
-    ShowNotification(ns and "AUTO DESYNC ENABLED" or "RESTART TO DISABLE", "")
-end)
-CreateZToggle(pgMisc, "Dark Sky + Shiny", Config.DarkSky or false, function(ns, set)
-    set(ns)
-    Config.DarkSky = ns; Config.ShinyGraphics = ns; SaveConfig()
-    ShowNotification("DARK SKY + SHINY", ns and "ENABLED" or "DISABLED")
-end)
-
--- FOV Slider
-CreateZSlider(pgMisc, "FOV", 30, 180, Config.FOV or 70, true, function(v)
-    Config.FOV = v; SaveConfig()
-    if Workspace.CurrentCamera then Workspace.CurrentCamera.FieldOfView = v end
-end)
-
-CreateZSection(pgMisc, "Server")
-CreateZButton(pgMisc, "Rejoin Server", C_S.elementBg, function()
-    TeleportService:Teleport(game.PlaceId, LocalPlayer)
-end)
-CreateZButton(pgMisc, "Server Hop", C_S.elementBg, function()
-    ShowNotification("SERVER HOP", "Finding new server...")
-    task.spawn(function()
-        local ok, servers = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?limit=100"))
-        end)
-        if ok and servers and servers.data then
-            for _, s2 in pairs(servers.data) do
-                if s2.id ~= game.JobId and s2.playing < s2.maxPlayers then
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, s2.id, LocalPlayer)
-                    return
-                end
-            end
-        end
-        TeleportService:Teleport(game.PlaceId, LocalPlayer)
-    end)
-end)
-CreateZButton(pgMisc, "Instant Leave", C_S.error, function()
-    kickPlayer()
-end)
-
-CreateZSection(pgMisc, "Emotes")
-CreateZButton(pgMisc, "Griddy", C_S.elementBg, function()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        local anim = Instance.new("Animation")
-        anim.AnimationId = "rbxassetid://5432167080"
-        local track = hum:LoadAnimation(anim)
-        track:Play()
-        ShowNotification("EMOTE", "Griddy!")
-    end
-end)
-CreateZButton(pgMisc, "Take The L", C_S.elementBg, function()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        local anim = Instance.new("Animation")
-        anim.AnimationId = "rbxassetid://4723695224"
-        local track = hum:LoadAnimation(anim)
-        track:Play()
-        ShowNotification("EMOTE", "Take the L!")
-    end
-end)
-
--- TAB: KEYS
-local pgKeys = createSettingsTab("KEYS")
-CreateZSection(pgKeys, "Keybinds")
-
-local keybindDefs = {
-    {"TP Keybind", "TpKey", "TpSettings"},
-    {"Auto Clone Keybind", "CloneKey", "TpSettings"},
-    {"Carpet Speed Keybind", "CarpetSpeedKey", "TpSettings"},
-    {"TP to Best Keybind", "TpBestKey", nil},
-    {"Insta Respawn Keybind", "InstaRespawnKey", nil},
-    {"Insta Cloner Keybind", "InstaClonerKey", nil},
-    {"Ragdoll Self Keybind", "RagdollSelfKey", nil},
-    {"Kick Keybind", "KickKey", nil},
-    {"Menu Toggle Key", "MenuKey", nil},
-    {"Reset Keybind", "ResetKey", nil},
-    {"Steal Speed Keybind", "StealSpeedKey", nil},
-    {"Click To AP Keybind", "ClickToAPKeybind", nil},
-    {"Proximity AP Keybind", "ProximityAPKeybind", nil},
-    {"Job Joiner Keybind", "JobJoinerKey", nil},
-    {"Invis Toggle Key", "InvisToggleKey", nil},
-}
-
-for _, def in ipairs(keybindDefs) do
-    local labelText, keyField, tpField = def[1], def[2], def[3]
-    local currentKey
-    if tpField then
-        currentKey = Config[tpField] and Config[tpField][keyField] or ""
-    else
-        currentKey = Config[keyField] or ""
-    end
-    if currentKey == "" then currentKey = "NONE" end
-    CreateZKeybind(pgKeys, labelText, currentKey, function(keyName)
-        if tpField then
-            if Config[tpField] then Config[tpField][keyField] = keyName end
-        else
-            Config[keyField] = keyName
-        end
-        SaveConfig()
-        ShowNotification(labelText:upper(), keyName)
-    end)
-end
-
--- TAB: EXTRA
-local pgExtra = createSettingsTab("EXTRA")
-
-CreateZSection(pgExtra, "GUI Style")
-
-local guiStyleLabel = Instance.new("TextLabel", pgExtra)
-guiStyleLabel.Size = UDim2.new(1, -10 * s, 0, 30 * s)
-guiStyleLabel.BackgroundTransparency = 1
-guiStyleLabel.Text = "Currently using: Zyphrot Style"
-guiStyleLabel.TextColor3 = C_S.primary
-guiStyleLabel.Font = Enum.Font.GothamBold
-guiStyleLabel.TextSize = 12 * s
-guiStyleLabel.TextXAlignment = Enum.TextXAlignment.Center
-
-local _guiStyleState = "zyphrot" -- "zyphrot" or "classic"
-
-CreateZButton(pgExtra, "Switch to Classic GUI Style", C_S.elementBg, function(btn)
-    if _guiStyleState == "zyphrot" then
-        _guiStyleState = "classic"
-        btn.Text = "Switch to Zyphrot GUI Style"
-        guiStyleLabel.Text = "Currently using: Classic Style"
-        -- Hide new GUI internals, show classic flat layout
-        sSidebar.Visible = false
-        sContentArea.Visible = false
-        sBgContainer.Visible = false
-        
-        -- Build a quick classic flat frame inside sFrame
-        local classicScroll = Instance.new("ScrollingFrame", sFrame)
-        classicScroll.Name = "ClassicModeScroll"
-        classicScroll.Size = UDim2.new(1, -20, 1, -60)
-        classicScroll.Position = UDim2.new(0, 10, 0, 50)
-        classicScroll.BackgroundTransparency = 1
-        classicScroll.ScrollBarThickness = 4
-        classicScroll.ScrollBarImageColor3 = C_S.primary
-        
-        local classicTitle = Instance.new("TextLabel", sFrame)
-        classicTitle.Size = UDim2.new(1, 0, 0, 40)
-        classicTitle.BackgroundColor3 = Color3.fromRGB(8, 18, 8)
-        classicTitle.Text = "NYX HUB  —  Classic Style"
-        classicTitle.Font = Enum.Font.GothamBlack
-        classicTitle.TextSize = 15
-        classicTitle.TextColor3 = C_S.primary
-        classicTitle.BorderSizePixel = 0
-        Instance.new("UICorner", classicTitle).CornerRadius = UDim.new(0, 8)
-        
-        local classicLayout = Instance.new("UIListLayout", classicScroll)
-        classicLayout.Padding = UDim.new(0, 4)
-        classicLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            classicScroll.CanvasSize = UDim2.new(0, 0, 0, classicLayout.AbsoluteContentSize.Y + 20)
-        end)
-        
-        -- Rebuild all toggles in flat classic style
-        local classicDefs = {
-            {"FPS Boost", "FPSBoost"},
-            {"Click To AP", "ClickToAP"},
-            {"Auto Steal Speed", "AutoStealSpeed"},
-            {"Infinite Jump", nil},
-            {"Anti-Bee & Disco", "AntiBeeDisco"},
-            {"Auto Destroy Turrets", "AutoDestroyTurrets"},
-            {"Notify 50M+", "Notify50M"},
-            {"Brainrot ESP", "BrainrotESP"},
-            {"Player ESP", "PlayerESP"},
-            {"Base Timer ESP", "BaseTimerESP"},
-            {"Duel Base ESP", "DuelBaseESP"},
-            {"Line to Base", "LineToBase"},
-            {"Tracer", "TracerEnabled"},
-            {"Base X-Ray", "XrayEnabled"},
-            {"Anti Ragdoll V2", "AntiRagdollV2"},
-            {"Auto TP on Load", nil},
-            {"Auto Unlock on Steal", "AutoUnlockOnSteal"},
-            {"Auto Reset on Balloon", "AutoResetOnBalloon"},
-            {"Lock UI Dragging", "UILocked"},
-            {"Hide Admin Panel", "HideAdminPanel"},
-            {"Hide Auto Steal", "HideAutoSteal"},
-        }
-        
-        for _, def in ipairs(classicDefs) do
-            local rowLabel, configKey = def[1], def[2]
-            local row = Instance.new("Frame", classicScroll)
-            row.Size = UDim2.new(1, -8, 0, 36)
-            row.BackgroundColor3 = Color3.fromRGB(8, 16, 8)
-            row.BorderSizePixel = 0
-            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-            local sep = Instance.new("Frame", row)
-            sep.Size = UDim2.new(1, 0, 0, 1)
-            sep.Position = UDim2.new(0, 0, 1, -1)
-            sep.BackgroundColor3 = Color3.fromRGB(0, 100, 40)
-            sep.BackgroundTransparency = 0.6
-            sep.BorderSizePixel = 0
-            local lbl = Instance.new("TextLabel", row)
-            lbl.Size = UDim2.new(1, -80, 1, 0)
-            lbl.Position = UDim2.new(0, 14, 0, 0)
-            lbl.BackgroundTransparency = 1
-            lbl.Text = rowLabel
-            lbl.Font = Enum.Font.GothamMedium
-            lbl.TextColor3 = Color3.fromRGB(220, 220, 230)
-            lbl.TextSize = 12
-            lbl.TextXAlignment = Enum.TextXAlignment.Left
-            local initialState = configKey and Config[configKey] or false
-            local ON_C = Color3.fromRGB(50, 200, 90)
-            local OFF_C = Color3.fromRGB(55, 55, 70)
-            local sw = Instance.new("Frame", row)
-            sw.Size = UDim2.new(0, 44, 0, 24)
-            sw.Position = UDim2.new(1, -54, 0.5, -12)
-            sw.BackgroundColor3 = initialState and ON_C or OFF_C
-            sw.BorderSizePixel = 0
-            Instance.new("UICorner", sw).CornerRadius = UDim.new(1, 0)
-            local dot = Instance.new("Frame", sw)
-            dot.Size = UDim2.new(0, 18, 0, 18)
-            dot.Position = initialState and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
-            dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            dot.BorderSizePixel = 0
-            Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-            local tbtn = Instance.new("TextButton", row)
-            tbtn.Size = UDim2.new(1, 0, 1, 0)
-            tbtn.BackgroundTransparency = 1
-            tbtn.Text = ""
-            local isOn = initialState
-            tbtn.MouseButton1Click:Connect(function()
-                isOn = not isOn
-                if configKey then Config[configKey] = isOn; SaveConfig() end
-                TweenService:Create(sw, TweenInfo.new(0.12), {BackgroundColor3 = isOn and ON_C or OFF_C}):Play()
-                TweenService:Create(dot, TweenInfo.new(0.12, Enum.EasingStyle.Quad), {
-                    Position = isOn and UDim2.new(1, -21, 0.5, -9) or UDim2.new(0, 3, 0.5, -9)
-                }):Play()
-            end)
-        end
-        
-        ShowNotification("GUI STYLE", "Switched to Classic")
-    else
-        _guiStyleState = "zyphrot"
-        btn.Text = "Switch to Classic GUI Style"
-        guiStyleLabel.Text = "Currently using: Zyphrot Style"
-        sSidebar.Visible = true
-        sContentArea.Visible = true
-        sBgContainer.Visible = true
-        local classicScroll = sFrame:FindFirstChild("ClassicModeScroll")
-        if classicScroll then classicScroll:Destroy() end
-        local classicTitle = sFrame:FindFirstChild("ClassicModeTitle")
-        if classicTitle then classicTitle:Destroy() end
-        ShowNotification("GUI STYLE", "Switched to Zyphrot Style")
-    end
-end)
-CreateZSection(pgExtra, "GUI Style")
-
-local guiStyleLabel2 = Instance.new("TextLabel", pgExtra)
-guiStyleLabel2.Size = UDim2.new(1, -10 * s, 0, 20 * s)
-guiStyleLabel2.BackgroundTransparency = 1
-guiStyleLabel2.Text = "Currently using: Modern"
-guiStyleLabel2.TextColor3 = C_S.primary
-guiStyleLabel2.Font = Enum.Font.GothamBold
-guiStyleLabel2.TextSize = 11 * s
-guiStyleLabel2.TextXAlignment = Enum.TextXAlignment.Center
-
-local _currentGUIStyle = "modern"
-
-CreateZButton(pgExtra, "Switch to Classic", C_S.elementBg, function(btn)
-    if _currentGUIStyle == "modern" then
-        _currentGUIStyle = "classic"
-        btn.Text = "Switch to Modern"
-        guiStyleLabel2.Text = "Currently using: Classic"
-        -- Hide modern elements
-        sSidebar.Visible = false
-        sContentArea.Visible = false
-        sBgContainer.Visible = false
-        -- Show classic
-        sFrame.Visible = true
-    else
-        _currentGUIStyle = "modern"
-        btn.Text = "Switch to Classic"
-        guiStyleLabel2.Text = "Currently using: Modern"
-        -- Show modern elements
-        sSidebar.Visible = true
-        sContentArea.Visible = true
-        sBgContainer.Visible = true
-        -- Hide classic
-        sFrame.Visible = false
-    end
-end)
-
-CreateZSection(pgExtra, "Default Steal Mode")
-
-CreateZToggle(pgExtra, "Default To Nearest", Config.DefaultToNearest, function(ns, set)
-    if ns then
-        Config.DefaultToNearest = true; Config.DefaultToHighest = false; Config.DefaultToPriority = false
-        set(true)
-    else
-        if not (Config.DefaultToHighest or Config.DefaultToPriority) then
-            set(true); ShowNotification("DEFAULT MODE", "At least one default must be enabled"); return
-        end
-        Config.DefaultToNearest = false; set(false)
-    end
-    SaveConfig()
-    ShowNotification("DEFAULT TO NEAREST", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgExtra, "Default To Highest", Config.DefaultToHighest, function(ns, set)
-    if ns then
-        Config.DefaultToNearest = false; Config.DefaultToHighest = true; Config.DefaultToPriority = false
-        set(true)
-    else
-        if not (Config.DefaultToNearest or Config.DefaultToPriority) then
-            set(true); ShowNotification("DEFAULT MODE", "At least one default must be enabled"); return
-        end
-        Config.DefaultToHighest = false; set(false)
-    end
-    SaveConfig()
-    ShowNotification("DEFAULT TO HIGHEST", ns and "ENABLED" or "DISABLED")
-end)
-CreateZToggle(pgExtra, "Default To Priority", Config.DefaultToPriority, function(ns, set)
-    if ns then
-        Config.DefaultToNearest = false; Config.DefaultToHighest = false; Config.DefaultToPriority = true
-        set(true)
-    else
-        if not (Config.DefaultToNearest or Config.DefaultToHighest) then
-            set(true); ShowNotification("DEFAULT MODE", "At least one default must be enabled"); return
-        end
-        Config.DefaultToPriority = false; set(false)
-    end
-    SaveConfig()
-    ShowNotification("DEFAULT TO PRIORITY", ns and "ENABLED" or "DISABLED")
-end)
-
-CreateZSection(pgExtra, "Alert Sound")
-local alertSoundBox = CreateZTextbox(pgExtra, "Alert Sound ID", "Sound ID", Config.AlertSoundID or "rbxassetid://6518811702", function(text)
-    Config.AlertSoundID = text; SaveConfig()
-    ShowNotification("ALERT SOUND", "Updated")
-end)
-
-CreateZSection(pgExtra, "Instant Steal")
-CreateZToggle(pgExtra, "Instant Steal Mode", Config.InstantSteal or false, function(ns, set)
-    set(ns); Config.InstantSteal = ns; SaveConfig()
-    ShowNotification("INSTANT STEAL", ns and "ENABLED" or "DISABLED")
-end)
-
--- Switch to first tab
-switchSettingsTabZ("MAIN")
+settingsGui.Name = "SettingsUI"; settingsGui.ResetOnSpawn = false
+settingsGui.Parent = PlayerGui; settingsGui.Enabled = false
 
 local sFrame = Instance.new("Frame")
 sFrame.Size = UDim2.new(0, 300, 0, 620)
@@ -6367,9 +5012,8 @@ local sTabPadding = Instance.new("UIPadding", sTabBar)
 sTabPadding.PaddingLeft = UDim.new(0, 2)
 sTabPadding.PaddingRight = UDim.new(0, 2)
 
-local TAB_NAMES = {"MAIN", "MOVEMENT", "AUTO TP", "ESP", "PLAYER", "UI", "MISC", "KEYBINDS", "EXTRA"}
--- Legacy GUI removed, replaced by Zyphrot-style GUI
-local activeSettingsTab = "MOVEMENT"
+local TAB_NAMES = {"MAIN", "MOV", "AUTO TP", "ESP", "PLAYER", "UI", "MISC", "KEYS", "EXTRA"}
+local activeSettingsTab = "MOV"
 local settingsTabButtons = {}
 local settingsTabContents = {}
 
@@ -6449,8 +5093,21 @@ for _, tabName in ipairs(TAB_NAMES) do
 end
 
 -- Override CreateRow to use active tab
-local _origCreateRow = CreateRow
-CreateRow = function(text, height)
+local function CreateRow(text, height)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, height or 42)
+    row.BackgroundColor3 = Color3.fromRGB(8, 16, 8)
+    row.BackgroundTransparency = 0
+    row.BorderSizePixel = 0
+    local lbl = Instance.new("TextLabel", row)
+    lbl.Size = UDim2.new(1, -90, 1, 0)
+    lbl.Position = UDim2.new(0, 14, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.Font = Enum.Font.GothamMedium
+    lbl.TextColor3 = Color3.fromRGB(220, 220, 230)
+    lbl.TextSize = 12
+…
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, height or 42)
     row.BackgroundColor3 = Color3.fromRGB(8, 16, 8)
@@ -6797,7 +5454,7 @@ for _, toolName in ipairs(toolOptions) do
     toolSwitches[toolName] = ts
 end
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rBind = CreateRow("TP Keybind")
 local bBind = Instance.new("TextButton", rBind)
 bBind.Size=UDim2.new(0,60,0,24); bBind.Position=UDim2.new(1,-70,0.5,-12)
@@ -6815,7 +5472,7 @@ bBind.MouseButton1Click:Connect(function()
     end)
 end)
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rBindClone = CreateRow("Auto Clone Keybind")
 local bBindClone = Instance.new("TextButton", rBindClone)
 bBindClone.Size=UDim2.new(0,60,0,24); bBindClone.Position=UDim2.new(1,-70,0.5,-12)
@@ -6834,7 +5491,7 @@ bBindClone.MouseButton1Click:Connect(function()
 end)
 
 CreateSectionHeader("")
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rCarpetBind = CreateRow("Carpet Speed Keybind")
 local bCarpet = Instance.new("TextButton", rCarpetBind)
 bCarpet.Size=UDim2.new(0,60,0,24); bCarpet.Position=UDim2.new(1,-70,0.5,-12)
@@ -6852,7 +5509,7 @@ bCarpet.MouseButton1Click:Connect(function()
     end)
 end)
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rTpBest = CreateRow("TP to Best Keybind")
 local bTpBest = Instance.new("TextButton", rTpBest)
 bTpBest.Size=UDim2.new(0,60,0,24); bTpBest.Position=UDim2.new(1,-70,0.5,-12)
@@ -6870,7 +5527,7 @@ bTpBest.MouseButton1Click:Connect(function()
     end)
 end)
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rInstaRespawn = CreateRow("Insta Respawn Keybind")
 local bInstaRespawn = Instance.new("TextButton", rInstaRespawn)
 bInstaRespawn.Size=UDim2.new(0,60,0,24); bInstaRespawn.Position=UDim2.new(1,-70,0.5,-12)
@@ -6888,7 +5545,7 @@ bInstaRespawn.MouseButton1Click:Connect(function()
     end)
 end)
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rInstaCloner = CreateRow("Insta Cloner Keybind")
 local bInstaCloner = Instance.new("TextButton", rInstaCloner)
 bInstaCloner.Size=UDim2.new(0,60,0,24); bInstaCloner.Position=UDim2.new(1,-70,0.5,-12)
@@ -6906,7 +5563,7 @@ bInstaCloner.MouseButton1Click:Connect(function()
     end)
 end)
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rRagdollSelf = CreateRow("Ragdoll Self Keybind")
 local bRagdollSelf = Instance.new("TextButton", rRagdollSelf)
 bRagdollSelf.Size=UDim2.new(0,60,0,24); bRagdollSelf.Position=UDim2.new(1,-70,0.5,-12)
@@ -6935,7 +5592,7 @@ carpetStatusLbl.TextXAlignment=Enum.TextXAlignment.Right
 _carpetStatusLabel = carpetStatusLbl
 
 CreateSectionHeader("")
-activeSettingsTab = "MOVEMENT"
+activeSettingsTab = "MOV"
 local rIH_AntiAFK = CreateRow("Anti AFK")
 CreateToggleSwitch(rIH_AntiAFK, false, function(ns, set)
     set(ns)
@@ -6981,7 +5638,7 @@ CreateToggleSwitch(rAutoResetBalloonMOV, Config.AutoResetOnBalloon, function(ns,
     set(ns); Config.AutoResetOnBalloon = ns; SaveConfig()
     ShowNotification("AUTO RESET ON BALLOON", ns and "ENABLED" or "DISABLED")
 end)
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rKickKeyMOV = CreateRow("Kick Keybind")
 local bKickKeyMOV = Instance.new("TextButton", rKickKeyMOV)
 bKickKeyMOV.Size=UDim2.new(0,60,0,24); bKickKeyMOV.Position=UDim2.new(1,-70,0.5,-12)
@@ -6998,7 +5655,7 @@ bKickKeyMOV.MouseButton1Click:Connect(function()
         end
     end)
 end)
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rMenuKeyMOV = CreateRow("Menu Toggle Key")
 local bMenuKeyMOV = Instance.new("TextButton", rMenuKeyMOV)
 bMenuKeyMOV.Size=UDim2.new(0,80,0,24); bMenuKeyMOV.Position=UDim2.new(1,-90,0.5,-12)
@@ -7015,7 +5672,7 @@ bMenuKeyMOV.MouseButton1Click:Connect(function()
         end
     end)
 end)
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rClickAPBindMOV = CreateRow("Click To AP Keybind")
 local bClickAPBindMOV = Instance.new("TextButton", rClickAPBindMOV)
 bClickAPBindMOV.Size=UDim2.new(0,60,0,24); bClickAPBindMOV.Position=UDim2.new(1,-70,0.5,-12)
@@ -7032,7 +5689,7 @@ bClickAPBindMOV.MouseButton1Click:Connect(function()
         end
     end)
 end)
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rProxAPBindMOV = CreateRow("Proximity AP Keybind")
 local bProxAPBindMOV = Instance.new("TextButton", rProxAPBindMOV)
 bProxAPBindMOV.Size=UDim2.new(0,60,0,24); bProxAPBindMOV.Position=UDim2.new(1,-70,0.5,-12)
@@ -7148,7 +5805,7 @@ CreateToggleSwitch(rInfJump, infiniteJumpEnabled, function(ns, set)
     ShowNotification("INFINITE JUMP", ns and "ENABLED" or "DISABLED")
 end)
 
-activeSettingsTab = "MOVEMENT"
+activeSettingsTab = "MOV"
 local rShowSS = CreateRow("Show Steal Speed Panel")
 CreateToggleSwitch(rShowSS, Config.ShowStealSpeedPanel, function(ns, set)
     set(ns); Config.ShowStealSpeedPanel = ns; SaveConfig()
@@ -7162,7 +5819,7 @@ CreateToggleSwitch(rAutoStealSpeed, Config.AutoStealSpeed, function(ns, set)
     ShowNotification("AUTO STEAL SPEED", ns and "ENABLED" or "DISABLED")
 end)
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rStealSpeedKey = CreateRow("Steal Speed Keybind")
 local bStealSpeedKey = Instance.new("TextButton", rStealSpeedKey)
 bStealSpeedKey.Size=UDim2.new(0,60,0,24); bStealSpeedKey.Position=UDim2.new(1,-70,0.5,-12)
@@ -7501,7 +6158,7 @@ end)
 
 CreateSectionHeader("")   
 
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rResetKey = CreateRow("Reset Keybind")
 local bResetKey = Instance.new("TextButton", rResetKey)
 bResetKey.Size=UDim2.new(0,60,0,24); bResetKey.Position=UDim2.new(1,-70,0.5,-12)
@@ -7598,7 +6255,7 @@ CreateToggleSwitch(rJoinerRow, Config.ShowJobJoiner, function(ns, set)
     if gui then gui.Enabled = Config.ShowJobJoiner end
     ShowNotification("JOB ID JOINER", ns and "ENABLED" or "DISABLED")
 end)
-activeSettingsTab = "KEYBINDS"
+activeSettingsTab = "KEYS"
 local rJoinerKey = CreateRow("Job Joiner Keybind")
 local bJoinerKey = Instance.new("TextButton", rJoinerKey)
 bJoinerKey.Size=UDim2.new(0,60,0,24); bJoinerKey.Position=UDim2.new(1,-70,0.5,-12)
@@ -7880,7 +6537,7 @@ local function updateSettingsCanvasSize()
 end
 
 sLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSettingsCanvasSize)
-
+task.defer(updateSettingsCanvasSize)
 
 if IS_MOBILE then
     sList.ScrollBarThickness = 6
